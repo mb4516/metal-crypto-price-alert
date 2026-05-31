@@ -28,33 +28,58 @@ SMTP_PORT = 587
 # ===========================================================
 
 def send_consolidated_email(results, alerts):
-    """Send one email with full summary table"""
+    """Send one beautiful email with highlighted table"""
     subject = f"🚨 PRICE ALERT: {len(alerts)} asset(s) moved ±{ALERT_THRESHOLD}%"
 
-    # Create a nice HTML table
+    # Create DataFrame
     df = pd.DataFrame(results)
     df = df[['name', 'symbol', 'current_price', 'change_percent']]
     df.columns = ['Asset Name', 'Symbol', 'Current Price ($)', '% Change']
-    
-    html_table = df.to_html(index=False, border=1, classes="summary-table")
-    
-    body = f"""
-    <h2>Price Movement Alert</h2>
-    <p><strong>Time:</strong> {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
-    <p><strong>Alert Triggered:</strong> {len(alerts)} asset(s) moved ±{ALERT_THRESHOLD}% or more</p>
-    
-    <h3>Full Portfolio Summary</h3>
-    {html_table}
-    
-    <hr>
-    <p><em>This is an automated alert from your personal trading tracker.</em></p>
+
+    # Build HTML table with highlighting
+    html = """
+    <style>
+        table { border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; }
+        th, td { padding: 10px; text-align: left; border: 1px solid #ddd; }
+        th { background-color: #f2f2f2; }
+        tr.alert { background-color: #ffe6cc; font-weight: bold; }
+        .positive { color: #006400; font-weight: bold; }
+        .negative { color: #8B0000; font-weight: bold; }
+    </style>
     """
-    
+
+    html += "<h2>Price Movement Alert</h2>"
+    html += f"<p><strong>Time:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>"
+    html += f"<p><strong>Alert Triggered:</strong> {len(alerts)} asset(s) moved ±{ALERT_THRESHOLD}% or more</p>"
+    html += "<h3>Full Portfolio Summary</h3>"
+
+    # Build table manually for better control
+    html += "<table>"
+    html += "<tr><th>Asset Name</th><th>Symbol</th><th>Current Price ($)</th><th>% Change</th></tr>"
+
+    for _, row in df.iterrows():
+        change = row['% Change']
+        is_alert = abs(change) >= ALERT_THRESHOLD
+        
+        row_class = ' class="alert"' if is_alert else ''
+        change_class = 'positive' if change > 0 else 'negative'
+        
+        html += f'<tr{row_class}>'
+        html += f'<td>{row["Asset Name"]}</td>'
+        html += f'<td>{row["Symbol"]}</td>'
+        html += f'<td>${row["Current Price ($)"]:.4f}</td>'
+        html += f'<td class="{change_class}">{change:+.2f}%</td>'
+        html += '</tr>'
+
+    html += "</table>"
+    html += "<hr>"
+    html += "<p><em>This is an automated alert from your personal trading tracker.</em></p>"
+
     msg = MIMEMultipart()
     msg['From'] = SENDER_EMAIL
     msg['To'] = RECIPIENT_EMAIL
     msg['Subject'] = subject
-    msg.attach(MIMEText(body, 'html'))
+    msg.attach(MIMEText(html, 'html'))
 
     try:
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
@@ -62,7 +87,7 @@ def send_consolidated_email(results, alerts):
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, msg.as_string())
         server.quit()
-        print(f"✅ Consolidated email alert sent successfully!")
+        print(f"✅ Highlighted consolidated email sent successfully!")
         return True
     except Exception as e:
         print(f"❌ Failed to send email: {e}")
@@ -72,7 +97,6 @@ def get_current_price(ticker_symbol):
     try:
         ticker = yf.Ticker(ticker_symbol)
         info = ticker.fast_info
-        
         current_price = info.get('lastPrice') or info.get('regularMarketPrice')
         previous_close = info.get('previousClose')
         
@@ -85,8 +109,7 @@ def get_current_price(ticker_symbol):
             "name": TICKERS.get(ticker_symbol, ticker_symbol),
             "symbol": ticker_symbol,
             "current_price": round(current_price, 4),
-            "change_percent": round(change_percent, 2),
-            "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "change_percent": round(change_percent, 2)
         }
     except Exception as e:
         return {"symbol": ticker_symbol, "error": str(e)}
@@ -118,9 +141,8 @@ def main():
             alerts.append(data)
             print(f"   ⚠️  ALERT TRIGGERED for {data['name']}")
     
-    # Send ONE consolidated email if any alerts were triggered
     if alerts:
-        print(f"\n⚠️  Sending consolidated email with full summary...")
+        print(f"\n⚠️  Sending highlighted consolidated email...")
         send_consolidated_email(results, alerts)
     else:
         print("\n✅ No major movements detected. No email sent.")
