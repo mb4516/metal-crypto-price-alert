@@ -6,7 +6,6 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
-from dotenv import load_dotenv
 
 # ====================== CONFIGURATION ======================
 TICKERS = {
@@ -28,19 +27,27 @@ SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 # ===========================================================
 
-load_dotenv()
+def send_consolidated_email(results, alerts):
+    """Send one email with full summary table"""
+    subject = f"🚨 PRICE ALERT: {len(alerts)} asset(s) moved ±{ALERT_THRESHOLD}%"
 
-def send_email_alert(symbol, name, current_price, change_percent):
-    subject = f"🚨 PRICE ALERT: {name} moved {change_percent:+.2f}%"
+    # Create a nice HTML table
+    df = pd.DataFrame(results)
+    df = df[['name', 'symbol', 'current_price', 'change_percent']]
+    df.columns = ['Asset Name', 'Symbol', 'Current Price ($)', '% Change']
+    
+    html_table = df.to_html(index=False, border=1, classes="summary-table")
     
     body = f"""
-    <h2>Price Alert Triggered</h2>
-    <p><strong>{name} ({symbol})</strong></p>
-    <p><strong>Current Price:</strong> ${current_price:.4f}</p>
-    <p><strong>Change:</strong> {change_percent:+.2f}%</p>
+    <h2>Price Movement Alert</h2>
     <p><strong>Time:</strong> {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
+    <p><strong>Alert Triggered:</strong> {len(alerts)} asset(s) moved ±{ALERT_THRESHOLD}% or more</p>
+    
+    <h3>Full Portfolio Summary</h3>
+    {html_table}
+    
     <hr>
-    <p>This is an automated alert from your personal trading tracker.</p>
+    <p><em>This is an automated alert from your personal trading tracker.</em></p>
     """
     
     msg = MIMEMultipart()
@@ -55,10 +62,10 @@ def send_email_alert(symbol, name, current_price, change_percent):
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, msg.as_string())
         server.quit()
-        print(f"✅ Email alert successfully sent for {symbol}")
+        print(f"✅ Consolidated email alert sent successfully!")
         return True
     except Exception as e:
-        print(f"❌ Failed to send email for {symbol}: {e}")
+        print(f"❌ Failed to send email: {e}")
         return False
 
 def get_current_price(ticker_symbol):
@@ -70,7 +77,7 @@ def get_current_price(ticker_symbol):
         previous_close = info.get('previousClose')
         
         if not current_price or not previous_close:
-            return {"symbol": ticker_symbol, "error": "No price data available"}
+            return {"symbol": ticker_symbol, "error": "No price data"}
 
         change_percent = ((current_price - previous_close) / previous_close) * 100
         
@@ -78,7 +85,6 @@ def get_current_price(ticker_symbol):
             "name": TICKERS.get(ticker_symbol, ticker_symbol),
             "symbol": ticker_symbol,
             "current_price": round(current_price, 4),
-            "previous_close": round(previous_close, 4),
             "change_percent": round(change_percent, 2),
             "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
@@ -86,38 +92,42 @@ def get_current_price(ticker_symbol):
         return {"symbol": ticker_symbol, "error": str(e)}
 
 def main():
-    print("="*60)
+    print("="*70)
     print("🚀 PRICE ALERT SCANNER STARTED")
     print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("="*60)
+    print("="*70)
     
-    alerts_triggered = 0
+    results = []
+    alerts = []
     
     for symbol in TICKERS.keys():
-        print(f"\nChecking {symbol}...")
+        print(f"Checking {symbol}...")
         data = get_current_price(symbol)
         
         if "error" in data:
-            print(f"❌ Error fetching {symbol}: {data['error']}")
+            print(f"❌ Error: {data['error']}")
             continue
             
-        name = data['name']
+        results.append(data)
         change = data['change_percent']
-        price = data['current_price']
         
         arrow = "🟢" if change > 0 else "🔴"
-        print(f"{arrow} {name:30} | ${price:.4f} | {change:+.2f}%")
+        print(f"{arrow} {data['name']:30} | ${data['current_price']:.4f} | {change:+.2f}%")
         
-        # Trigger alert if movement is 3% or more
         if abs(change) >= ALERT_THRESHOLD:
-            print(f"   ⚠️  BIG MOVE DETECTED! Sending email alert...")
-            success = send_email_alert(symbol, name, price, change)
-            if success:
-                alerts_triggered += 1
+            alerts.append(data)
+            print(f"   ⚠️  ALERT TRIGGERED for {data['name']}")
     
-    print("\n" + "="*60)
-    print(f"✅ SCAN COMPLETE - {alerts_triggered} alert(s) triggered")
-    print("="*60)
+    # Send ONE consolidated email if any alerts were triggered
+    if alerts:
+        print(f"\n⚠️  Sending consolidated email with full summary...")
+        send_consolidated_email(results, alerts)
+    else:
+        print("\n✅ No major movements detected. No email sent.")
+    
+    print("\n" + "="*70)
+    print(f"SCAN COMPLETE - {len(alerts)} alert(s) triggered")
+    print("="*70)
 
 if __name__ == "__main__":
     main()
