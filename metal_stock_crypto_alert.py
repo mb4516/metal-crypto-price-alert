@@ -28,15 +28,15 @@ SMTP_PORT = 587
 # ===========================================================
 
 def send_consolidated_email(results, alerts):
-    """Send one beautiful email with highlighted table"""
+    """Send one beautiful email with highlighted table including Previous Close"""
     subject = f"🚨 PRICE ALERT: {len(alerts)} asset(s) moved ±{ALERT_THRESHOLD}%"
 
     # Create DataFrame
     df = pd.DataFrame(results)
-    df = df[['name', 'symbol', 'current_price', 'change_percent']]
-    df.columns = ['Asset Name', 'Symbol', 'Current Price ($)', '% Change']
+    df = df[['name', 'symbol', 'current_price', 'previous_close', 'change_percent']]
+    df.columns = ['Asset Name', 'Symbol', 'Current Price ($)', 'Previous Close ($)', '% Change']
 
-    # Build HTML table with highlighting
+    # Build styled HTML
     html = """
     <style>
         table { border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; }
@@ -53,9 +53,9 @@ def send_consolidated_email(results, alerts):
     html += f"<p><strong>Alert Triggered:</strong> {len(alerts)} asset(s) moved ±{ALERT_THRESHOLD}% or more</p>"
     html += "<h3>Full Portfolio Summary</h3>"
 
-    # Build table manually for better control
+    # Build table manually for full control
     html += "<table>"
-    html += "<tr><th>Asset Name</th><th>Symbol</th><th>Current Price ($)</th><th>% Change</th></tr>"
+    html += "<tr><th>Asset Name</th><th>Symbol</th><th>Current Price ($)</th><th>Previous Close ($)</th><th>% Change</th></tr>"
 
     for _, row in df.iterrows():
         change = row['% Change']
@@ -68,6 +68,7 @@ def send_consolidated_email(results, alerts):
         html += f'<td>{row["Asset Name"]}</td>'
         html += f'<td>{row["Symbol"]}</td>'
         html += f'<td>${row["Current Price ($)"]:.4f}</td>'
+        html += f'<td>${row["Previous Close ($)"]:.4f}</td>'
         html += f'<td class="{change_class}">{change:+.2f}%</td>'
         html += '</tr>'
 
@@ -87,7 +88,7 @@ def send_consolidated_email(results, alerts):
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, msg.as_string())
         server.quit()
-        print(f"✅ Highlighted consolidated email sent successfully!")
+        print(f"✅ Highlighted email with Previous Close sent successfully!")
         return True
     except Exception as e:
         print(f"❌ Failed to send email: {e}")
@@ -109,16 +110,17 @@ def get_current_price(ticker_symbol):
             "name": TICKERS.get(ticker_symbol, ticker_symbol),
             "symbol": ticker_symbol,
             "current_price": round(current_price, 4),
+            "previous_close": round(previous_close, 4),
             "change_percent": round(change_percent, 2)
         }
     except Exception as e:
         return {"symbol": ticker_symbol, "error": str(e)}
 
 def main():
-    print("="*70)
+    print("="*80)
     print("🚀 PRICE ALERT SCANNER STARTED")
     print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("="*70)
+    print("="*80)
     
     results = []
     alerts = []
@@ -142,14 +144,14 @@ def main():
             print(f"   ⚠️  ALERT TRIGGERED for {data['name']}")
     
     if alerts:
-        print(f"\n⚠️  Sending highlighted consolidated email...")
+        print(f"\n⚠️  Sending highlighted consolidated email with Previous Close...")
         send_consolidated_email(results, alerts)
     else:
         print("\n✅ No major movements detected. No email sent.")
     
-    print("\n" + "="*70)
+    print("\n" + "="*80)
     print(f"SCAN COMPLETE - {len(alerts)} alert(s) triggered")
-    print("="*70)
+    print("="*80)
 
 if __name__ == "__main__":
     main()
