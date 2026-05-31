@@ -18,7 +18,17 @@ TICKERS = {
     "RUM":     "Rumble Inc. (RUM)"
 }
 
-ALERT_THRESHOLD = 3.0
+# === DYNAMIC THRESHOLDS (Per Asset) ===
+THRESHOLDS = {
+    "GC=F":  1.8,
+    "SI=F":  2.5,
+    "BTC-USD": 4.5,
+    "XRP-USD": 5.0,
+    "XLM-USD": 5.0,
+    "DJT":     6.5,
+    "RUM":     6.5
+}
+
 RECIPIENT_EMAIL = "mike.boaz@ymail.com"
 
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
@@ -28,15 +38,12 @@ SMTP_PORT = 587
 # ===========================================================
 
 def send_consolidated_email(results, alerts):
-    """Send one beautiful email with highlighted table including Previous Close"""
-    subject = f"🚨 PRICE ALERT: {len(alerts)} asset(s) moved ±{ALERT_THRESHOLD}%"
+    subject = f"🚨 PRICE ALERT: {len(alerts)} asset(s) triggered dynamic threshold"
 
-    # Create DataFrame
     df = pd.DataFrame(results)
-    df = df[['name', 'symbol', 'current_price', 'previous_close', 'change_percent']]
-    df.columns = ['Asset Name', 'Symbol', 'Current Price ($)', 'Previous Close ($)', '% Change']
+    df = df[['name', 'symbol', 'current_price', 'previous_close', 'change_percent', 'threshold']]
+    df.columns = ['Asset Name', 'Symbol', 'Current Price ($)', 'Previous Close ($)', '% Change', 'Threshold']
 
-    # Build styled HTML
     html = """
     <style>
         table { border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; }
@@ -48,18 +55,18 @@ def send_consolidated_email(results, alerts):
     </style>
     """
 
-    html += "<h2>Price Movement Alert</h2>"
+    html += "<h2>Dynamic Price Alert Triggered</h2>"
     html += f"<p><strong>Time:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>"
-    html += f"<p><strong>Alert Triggered:</strong> {len(alerts)} asset(s) moved ±{ALERT_THRESHOLD}% or more</p>"
+    html += f"<p><strong>Alerts Triggered:</strong> {len(alerts)} asset(s)</p>"
     html += "<h3>Full Portfolio Summary</h3>"
 
-    # Build table manually for full control
     html += "<table>"
-    html += "<tr><th>Asset Name</th><th>Symbol</th><th>Current Price ($)</th><th>Previous Close ($)</th><th>% Change</th></tr>"
+    html += "<tr><th>Asset Name</th><th>Symbol</th><th>Current Price</th><th>Previous Close</th><th>% Change</th><th>Threshold</th></tr>"
 
     for _, row in df.iterrows():
         change = row['% Change']
-        is_alert = abs(change) >= ALERT_THRESHOLD
+        threshold = row['Threshold']
+        is_alert = abs(change) >= threshold
         
         row_class = ' class="alert"' if is_alert else ''
         change_class = 'positive' if change > 0 else 'negative'
@@ -70,11 +77,12 @@ def send_consolidated_email(results, alerts):
         html += f'<td>${row["Current Price ($)"]:.4f}</td>'
         html += f'<td>${row["Previous Close ($)"]:.4f}</td>'
         html += f'<td class="{change_class}">{change:+.2f}%</td>'
+        html += f'<td>{threshold}%</td>'
         html += '</tr>'
 
     html += "</table>"
     html += "<hr>"
-    html += "<p><em>This is an automated alert from your personal trading tracker.</em></p>"
+    html += "<p><em>Dynamic thresholds used • Automated alert from your trading tracker</em></p>"
 
     msg = MIMEMultipart()
     msg['From'] = SENDER_EMAIL
@@ -88,7 +96,7 @@ def send_consolidated_email(results, alerts):
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, msg.as_string())
         server.quit()
-        print(f"✅ Highlighted email with Previous Close sent successfully!")
+        print("✅ Dynamic alert email sent successfully!")
         return True
     except Exception as e:
         print(f"❌ Failed to send email: {e}")
@@ -105,22 +113,24 @@ def get_current_price(ticker_symbol):
             return {"symbol": ticker_symbol, "error": "No price data"}
 
         change_percent = ((current_price - previous_close) / previous_close) * 100
+        threshold = THRESHOLDS.get(ticker_symbol, 3.0)
         
         return {
             "name": TICKERS.get(ticker_symbol, ticker_symbol),
             "symbol": ticker_symbol,
             "current_price": round(current_price, 4),
             "previous_close": round(previous_close, 4),
-            "change_percent": round(change_percent, 2)
+            "change_percent": round(change_percent, 2),
+            "threshold": threshold
         }
     except Exception as e:
         return {"symbol": ticker_symbol, "error": str(e)}
 
 def main():
-    print("="*80)
-    print("🚀 PRICE ALERT SCANNER STARTED")
+    print("="*85)
+    print("🚀 DYNAMIC PRICE ALERT SCANNER STARTED")
     print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("="*80)
+    print("="*85)
     
     results = []
     alerts = []
@@ -135,23 +145,24 @@ def main():
             
         results.append(data)
         change = data['change_percent']
+        threshold = data['threshold']
         
         arrow = "🟢" if change > 0 else "🔴"
-        print(f"{arrow} {data['name']:30} | ${data['current_price']:.4f} | {change:+.2f}%")
+        print(f"{arrow} {data['name']:30} | ${data['current_price']:.4f} | {change:+.2f}% (Threshold: {threshold}%)")
         
-        if abs(change) >= ALERT_THRESHOLD:
+        if abs(change) >= threshold:
             alerts.append(data)
-            print(f"   ⚠️  ALERT TRIGGERED for {data['name']}")
+            print(f"   ⚠️  DYNAMIC ALERT TRIGGERED!")
     
     if alerts:
-        print(f"\n⚠️  Sending highlighted consolidated email with Previous Close...")
+        print(f"\n⚠️  Sending consolidated email with dynamic thresholds...")
         send_consolidated_email(results, alerts)
     else:
-        print("\n✅ No major movements detected. No email sent.")
+        print("\n✅ No assets hit their dynamic thresholds. No email sent.")
     
-    print("\n" + "="*80)
-    print(f"SCAN COMPLETE - {len(alerts)} alert(s) triggered")
-    print("="*80)
+    print("\n" + "="*85)
+    print(f"SCAN COMPLETE - {len(alerts)} dynamic alert(s) triggered")
+    print("="*85)
 
 if __name__ == "__main__":
     main()
