@@ -1,0 +1,29 @@
+name: Price Alert Scanner
+
+on:
+  schedule:
+    - cron: '0 * * * *'        # Runs every hour
+  workflow_dispatch:           # Allows manual run from GitHub
+
+jobs:
+  run-alert:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run price alert script
+        env:
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+        run: python metal_stock_crypto_alert.py
