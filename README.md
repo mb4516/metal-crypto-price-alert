@@ -1,6 +1,6 @@
 # Metal, Crypto & Stock Price Alert System
 
-A personal automated price tracker and alert system for metals, crypto, and meme stocks.
+A personal automated trading monitor built for Mike Boaz.
 
 ### Assets Being Tracked:
 - **Gold Futures** (GC=F)
@@ -13,22 +13,34 @@ A personal automated price tracker and alert system for metals, crypto, and meme
 
 ### Key Features
 - Real-time price data from Yahoo Finance
-- **Consolidated Email Alerts**: Sends **one single email** containing a full summary table of **all assets** whenever any asset moves **±3%** or more
-- Runs automatically every hour on GitHub Actions
-- Clean logging for easy debugging
+- **Dynamic Threshold Alerts** — each asset has its own custom % threshold
+- **Consolidated Email Alerts** — sends **one email** with a clean, highlighted table when any asset hits its threshold
+- **Price History Logging** — automatically saves all price data to `price_history.csv` on every run
+- Runs automatically every hour using GitHub Actions
+
+### Dynamic Thresholds (Default)
+| Asset          | Threshold |
+|----------------|---------|
+| Gold (GC=F)    | 1.8%    |
+| Silver (SI=F)  | 2.5%    |
+| Bitcoin        | 4.5%    |
+| XRP / XLM      | 5.0%    |
+| DJT / RUM      | 6.5%    |
+
+### Files in Repository
+- `metal_stock_crypto_alert.py` → Main script (dynamic alerts + CSV logging)
+- `requirements.txt` → Python dependencies
+- `.github/workflows/price-alert.yml` → Hourly automation
+- `price_history.csv` → Historical price data (auto-generated)
+- `README.md`
 
 ### How It Works
-Every hour the script checks price changes.  
-If **any** asset moves 3% or more (up or down), you will receive **one email** at `mike.boaz@ymail.com` showing:
-- Current price of every symbol
-- Daily % gain/loss for all assets
-- Clear highlighting of the big movers
+Every hour the script:
+1. Checks current prices and % change for all assets
+2. Saves the data to `price_history.csv`
+3. If any asset exceeds **its own threshold**, sends **one consolidated email** with full portfolio summary
 
-### Repository Files
-- `metal_stock_crypto_alert.py` → Main alert script (consolidated email version)
-- `requirements.txt`
-- `.github/workflows/price-alert.yml` → Hourly automation
-- `README.md`
+You can download `price_history.csv` anytime from GitHub to analyze performance.
 
 ---
 
