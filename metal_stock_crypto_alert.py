@@ -18,18 +18,15 @@ TICKERS = {
     "RUM":     "Rumble Inc. (RUM)"
 }
 
-# === DYNAMIC THRESHOLDS (Per Asset) ===
+# Dynamic Thresholds
 THRESHOLDS = {
-    "GC=F":  1.8,
-    "SI=F":  2.5,
-    "BTC-USD": 4.5,
-    "XRP-USD": 5.0,
-    "XLM-USD": 5.0,
-    "DJT":     6.5,
-    "RUM":     6.5
+    "GC=F":  1.8, "SI=F":  2.5,
+    "BTC-USD": 4.5, "XRP-USD": 5.0, "XLM-USD": 5.0,
+    "DJT": 6.5, "RUM": 6.5
 }
 
 RECIPIENT_EMAIL = "mike.boaz@ymail.com"
+CSV_FILE = "price_history.csv"   # ← History will be saved here
 
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
@@ -37,8 +34,40 @@ SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 # ===========================================================
 
+def save_to_csv(results):
+    """Append current prices to CSV history file"""
+    timestamp = datetime.now()
+    
+    rows = []
+    for data in results:
+        rows.append({
+            "Timestamp": timestamp,
+            "Date": timestamp.date(),
+            "Time": timestamp.time(),
+            "Asset_Name": data["name"],
+            "Symbol": data["symbol"],
+            "Current_Price": data["current_price"],
+            "Previous_Close": data["previous_close"],
+            "Change_Percent": data["change_percent"],
+            "Threshold": data["threshold"]
+        })
+    
+    df_new = pd.DataFrame(rows)
+    
+    try:
+        # If file exists, append without header
+        if os.path.exists(CSV_FILE):
+            df_new.to_csv(CSV_FILE, mode='a', header=False, index=False)
+        else:
+            # Create new file with header
+            df_new.to_csv(CSV_FILE, index=False)
+        print(f"✅ Price history saved to {CSV_FILE}")
+    except Exception as e:
+        print(f"❌ Failed to save CSV: {e}")
+
 def send_consolidated_email(results, alerts):
-    subject = f"🚨 PRICE ALERT: {len(alerts)} asset(s) triggered dynamic threshold"
+    # ... (same email function as before - keeping it clean)
+    subject = f"🚨 PRICE ALERT: {len(alerts)} asset(s) triggered"
 
     df = pd.DataFrame(results)
     df = df[['name', 'symbol', 'current_price', 'previous_close', 'change_percent', 'threshold']]
@@ -67,7 +96,6 @@ def send_consolidated_email(results, alerts):
         change = row['% Change']
         threshold = row['Threshold']
         is_alert = abs(change) >= threshold
-        
         row_class = ' class="alert"' if is_alert else ''
         change_class = 'positive' if change > 0 else 'negative'
         
@@ -81,8 +109,7 @@ def send_consolidated_email(results, alerts):
         html += '</tr>'
 
     html += "</table>"
-    html += "<hr>"
-    html += "<p><em>Dynamic thresholds used • Automated alert from your trading tracker</em></p>"
+    html += "<hr><p><em>Dynamic thresholds • History saved to price_history.csv</em></p>"
 
     msg = MIMEMultipart()
     msg['From'] = SENDER_EMAIL
@@ -96,7 +123,7 @@ def send_consolidated_email(results, alerts):
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, msg.as_string())
         server.quit()
-        print("✅ Dynamic alert email sent successfully!")
+        print("✅ Email sent successfully!")
         return True
     except Exception as e:
         print(f"❌ Failed to send email: {e}")
@@ -148,20 +175,24 @@ def main():
         threshold = data['threshold']
         
         arrow = "🟢" if change > 0 else "🔴"
-        print(f"{arrow} {data['name']:30} | ${data['current_price']:.4f} | {change:+.2f}% (Threshold: {threshold}%)")
+        print(f"{arrow} {data['name']:30} | ${data['current_price']:.4f} | {change:+.2f}% (Thresh: {threshold}%)")
         
         if abs(change) >= threshold:
             alerts.append(data)
             print(f"   ⚠️  DYNAMIC ALERT TRIGGERED!")
     
+    # Save history to CSV
+    save_to_csv(results)
+    
+    # Send email if alerts triggered
     if alerts:
-        print(f"\n⚠️  Sending consolidated email with dynamic thresholds...")
+        print(f"\n⚠️  Sending consolidated email...")
         send_consolidated_email(results, alerts)
     else:
-        print("\n✅ No assets hit their dynamic thresholds. No email sent.")
+        print("\n✅ No dynamic thresholds breached. No email sent.")
     
     print("\n" + "="*85)
-    print(f"SCAN COMPLETE - {len(alerts)} dynamic alert(s) triggered")
+    print(f"SCAN COMPLETE - {len(alerts)} alert(s) | History saved to CSV")
     print("="*85)
 
 if __name__ == "__main__":
