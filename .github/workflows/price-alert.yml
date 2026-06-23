@@ -2,8 +2,8 @@ name: Price Alert Scanner
 
 on:
   schedule:
-    - cron: '0 * * * *'        # Runs every hour
-  workflow_dispatch:           # Allows manual run
+    - cron: '0 * * * *'
+  workflow_dispatch:
 
 jobs:
   run-alert:
@@ -16,11 +16,10 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'   # Updated to newer Python
+          python-version: '3.12'
 
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
       - name: Run price alert script
         env:
