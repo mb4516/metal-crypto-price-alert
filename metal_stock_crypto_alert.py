@@ -1,4 +1,3 @@
-# metal_stock_crypto_alert.py
 import yfinance as yf
 from datetime import datetime, date
 import pandas as pd
@@ -23,7 +22,6 @@ TICKERS = {
     "ES=F":    "S&P 500 Futures"
 }
 
-# Dynamic Thresholds (easy to adjust)
 THRESHOLDS = {
     "GC=F": 1.8, "SI=F": 2.5, "BTC-USD": 4.5, "XRP-USD": 5.0, "XLM-USD": 5.0,
     "DJT": 6.5, "RUM": 6.5,
@@ -42,7 +40,8 @@ SMTP_PORT = 587
 def get_mortgage_rate():
     try:
         response = requests.get("https://www.freddiemac.com/pmms", timeout=10)
-        if "6.53" in response.text: return "6.53%"
+        if response.status_code == 200 and "6.53" in response.text:
+            return "6.53%"
         return "6.55%"
     except:
         return "6.55%"
@@ -59,35 +58,23 @@ def get_history_days():
 def calculate_bull_bear_score(data_dict):
     score = 0
     comments = []
-    
     for sym, data in data_dict.items():
         change = data.get('change_percent', 0)
-        name = data.get('name', sym)
-        
-        if sym == "^TNX" and change < -0.5: 
-            score += 1; comments.append("Falling yields (bullish)")
-        elif sym == "^TNX" and change > 0.5: 
-            score -= 1; comments.append("Rising yields (bearish)")
-            
-        if sym == "^VIX" and change < -5: 
-            score += 1; comments.append("Falling fear (bullish)")
-        elif sym == "^VIX" and change > 8: 
-            score -= 1; comments.append("Rising fear (bearish)")
-            
-        if sym == "DXY=F" and change < -0.4: 
-            score += 1; comments.append("Weak dollar (bullish for assets)")
-        elif sym == "DXY=F" and change > 0.4: 
-            score -= 1; comments.append("Strong dollar (bearish)")
-            
-        if sym == "ES=F" and change > 0.8: 
-            score += 1; comments.append("Strong S&P (bullish)")
-        elif sym == "ES=F" and change < -0.8: 
-            score -= 1; comments.append("Weak S&P (bearish)")
-    
+        if sym == "^TNX":
+            if change < -0.5: score += 1; comments.append("Falling yields → Bullish")
+            elif change > 0.5: score -= 1; comments.append("Rising yields → Bearish")
+        elif sym == "^VIX":
+            if change < -5: score += 1; comments.append("Falling VIX → Bullish")
+            elif change > 8: score -= 1; comments.append("Rising VIX → Bearish")
+        elif sym == "DXY=F":
+            if change < -0.4: score += 1; comments.append("Weak Dollar → Bullish")
+            elif change > 0.4: score -= 1; comments.append("Strong Dollar → Bearish")
+        elif sym == "ES=F":
+            if change > 0.8: score += 1; comments.append("Strong S&P → Bullish")
+            elif change < -0.8: score -= 1; comments.append("Weak S&P → Bearish")
     return score, comments
 
 def save_to_csv_once_per_day(results):
-    # (same as previous version - omitted for brevity, but keep your existing function)
     today = str(date.today())
     if os.path.exists(CSV_FILE):
         try:
@@ -115,10 +102,9 @@ def send_consolidated_email(results, alerts):
     history_days = get_history_days()
     data_dict = {r['symbol']: r for r in results}
     bull_bear_score, regime_comments = calculate_bull_bear_score(data_dict)
-    
+
     subject = f"🚨 MARKET UPDATE: {len(alerts)} alerts | Bull/Bear Score: {bull_bear_score}"
 
-    # Portfolio Table
     df = pd.DataFrame(results)
     df = df[['name', 'symbol', 'current_price', 'previous_close', 'change_percent', 'threshold']]
     df.columns = ['Asset Name', 'Symbol', 'Current Price', 'Previous Close', '% Change', 'Threshold']
@@ -140,7 +126,6 @@ def send_consolidated_email(results, alerts):
     html += f"<p><strong>Bull/Bear Score:</strong> {bull_bear_score} (Higher = more bullish)</p>"
     html += f"<p><strong>Time:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | History: {history_days} days</p>"
 
-    # Risk-On / Risk-Off Summary
     html += "<h3>Risk-On vs Risk-Off Summary</h3><ul>"
     for comment in regime_comments:
         html += f"<li>{comment}</li>"
@@ -160,7 +145,6 @@ def send_consolidated_email(results, alerts):
         html += f'<td>${row["Current Price"]:.4f}</td><td>${row["Previous Close"]:.4f}</td>'
         html += f'<td class="{change_class}">{change:+.2f}%</td><td>{threshold}%</td>'
         html += '</tr>'
-
     html += "</table><hr><p><em>Dynamic thresholds • Daily CSV logging</em></p>"
 
     msg = MIMEMultipart()
@@ -175,17 +159,34 @@ def send_consolidated_email(results, alerts):
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, msg.as_string())
         server.quit()
-        print("✅ Enhanced email with Bull/Bear Score sent!")
+        print("✅ Email sent successfully!")
         return True
     except Exception as e:
         print(f"❌ Failed to send email: {e}")
         return False
 
-# (get_current_price and save_to_csv_once_per_day functions remain the same as previous version)
-# ... [Keep your existing get_current_price and save_to_csv_once_per_day functions here]
+def get_current_price(ticker_symbol):
+    try:
+        ticker = yf.Ticker(ticker_symbol)
+        info = ticker.fast_info
+        current_price = info.get('lastPrice') or info.get('regularMarketPrice')
+        previous_close = info.get('previousClose')
+        if not current_price or not previous_close:
+            return {"symbol": ticker_symbol, "error": "No price data"}
+        change_percent = ((current_price - previous_close) / previous_close) * 100
+        threshold = THRESHOLDS.get(ticker_symbol, 3.0)
+        return {
+            "name": TICKERS.get(ticker_symbol, ticker_symbol),
+            "symbol": ticker_symbol,
+            "current_price": round(current_price, 4),
+            "previous_close": round(previous_close, 4),
+            "change_percent": round(change_percent, 2),
+            "threshold": threshold
+        }
+    except Exception as e:
+        return {"symbol": ticker_symbol, "error": str(e)}
 
 def main():
-    # Main function with Bull/Bear logic integrated (same structure as before)
     print("="*95)
     print("🚀 ENHANCED MARKET REGIME SCANNER STARTED")
     print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -196,7 +197,7 @@ def main():
     
     for symbol in TICKERS.keys():
         print(f"Checking {symbol}...")
-        data = get_current_price(symbol)  # Assume this function exists from previous versions
+        data = get_current_price(symbol)
         if "error" in data:
             print(f"❌ Error: {data['error']}")
             continue
@@ -212,12 +213,35 @@ def main():
     save_to_csv_once_per_day(results)
     
     if alerts:
-        print("Sending enhanced email with Bull/Bear analysis...")
+        print("Sending enhanced email...")
         send_consolidated_email(results, alerts)
     else:
         print("No major moves detected.")
-
+    
     print("="*95)
+
+def save_to_csv_once_per_day(results):
+    today = str(date.today())
+    if os.path.exists(CSV_FILE):
+        try:
+            df_existing = pd.read_csv(CSV_FILE)
+            if today in df_existing['Date'].astype(str).values:
+                print("📅 Today's data already saved.")
+                return
+        except:
+            pass
+    timestamp = datetime.now()
+    rows = []
+    for data in results:
+        rows.append({
+            "Timestamp": timestamp, "Date": timestamp.date(), "Time": timestamp.time(),
+            "Asset_Name": data["name"], "Symbol": data["symbol"],
+            "Current_Price": data["current_price"], "Previous_Close": data["previous_close"],
+            "Change_Percent": data["change_percent"], "Threshold": data["threshold"]
+        })
+    df_new = pd.DataFrame(rows)
+    df_new.to_csv(CSV_FILE, mode='a', header=not os.path.exists(CSV_FILE), index=False)
+    print(f"✅ Daily data saved to {CSV_FILE}")
 
 if __name__ == "__main__":
     main()
