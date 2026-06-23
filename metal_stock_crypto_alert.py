@@ -6,6 +6,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
 import requests
+from zoneinfo import ZoneInfo
 
 # ====================== CONFIGURATION ======================
 TICKERS = {
@@ -35,6 +36,8 @@ SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
+
+TIMEZONE = ZoneInfo("America/Chicago")  # CST / CDT (Texas)
 # ===========================================================
 
 def get_mortgage_rate():
@@ -84,11 +87,13 @@ def save_to_csv_once_per_day(results):
                 return
         except:
             pass
-    timestamp = datetime.now()
+    timestamp = datetime.now(TIMEZONE)
     rows = []
     for data in results:
         rows.append({
-            "Timestamp": timestamp, "Date": timestamp.date(), "Time": timestamp.time(),
+            "Timestamp": timestamp,
+            "Date": timestamp.date(),
+            "Time": timestamp.strftime("%I:%M %p"),  # 12-hour format
             "Asset_Name": data["name"], "Symbol": data["symbol"],
             "Current_Price": data["current_price"], "Previous_Close": data["previous_close"],
             "Change_Percent": data["change_percent"], "Threshold": data["threshold"]
@@ -102,6 +107,8 @@ def send_consolidated_email(results, alerts):
     history_days = get_history_days()
     data_dict = {r['symbol']: r for r in results}
     bull_bear_score, regime_comments = calculate_bull_bear_score(data_dict)
+    
+    local_time = datetime.now(TIMEZONE).strftime("%I:%M %p %Z")  # e.g., 2:05 PM CDT
 
     subject = f"🚨 MARKET UPDATE: {len(alerts)} alerts | Bull/Bear Score: {bull_bear_score}"
 
@@ -123,8 +130,9 @@ def send_consolidated_email(results, alerts):
 
     html += "<h2>Hourly Market Snapshot</h2>"
     html += f"<p class='mortgage'>🏠 30-Year Fixed Mortgage Rate: <strong>{mortgage_rate}</strong></p>"
+    html += f"<p><strong>Local Time (CST/CDT):</strong> {local_time}</p>"
     html += f"<p><strong>Bull/Bear Score:</strong> {bull_bear_score} (Higher = more bullish)</p>"
-    html += f"<p><strong>Time:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | History: {history_days} days</p>"
+    html += f"<p><strong>History Collected:</strong> {history_days} days of price data</p>"
 
     html += "<h3>Risk-On vs Risk-Off Summary</h3><ul>"
     for comment in regime_comments:
@@ -189,7 +197,8 @@ def get_current_price(ticker_symbol):
 def main():
     print("="*95)
     print("🚀 ENHANCED MARKET REGIME SCANNER STARTED")
-    print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    local_time = datetime.now(TIMEZONE).strftime("%I:%M %p %Z")
+    print(f"Local Time (CST/CDT): {local_time}")
     print("="*95)
     
     results = []
@@ -230,11 +239,13 @@ def save_to_csv_once_per_day(results):
                 return
         except:
             pass
-    timestamp = datetime.now()
+    timestamp = datetime.now(TIMEZONE)
     rows = []
     for data in results:
         rows.append({
-            "Timestamp": timestamp, "Date": timestamp.date(), "Time": timestamp.time(),
+            "Timestamp": timestamp,
+            "Date": timestamp.date(),
+            "Time": timestamp.strftime("%I:%M %p"),   # 12-hour CST
             "Asset_Name": data["name"], "Symbol": data["symbol"],
             "Current_Price": data["current_price"], "Previous_Close": data["previous_close"],
             "Change_Percent": data["change_percent"], "Threshold": data["threshold"]
