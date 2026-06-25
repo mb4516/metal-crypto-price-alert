@@ -80,8 +80,8 @@ def calculate_bull_bear_score(data_dict):
             elif change < -0.8: score -= 1; comments.append("Weak S&P → Bearish")
     return score, comments
 
-def get_60day_chart(symbol, name):
-    """Generate 60-day trend chart and return base64 image"""
+def get_sparkline(symbol, name):
+    """Generate small sparkline (tiny trend line)"""
     try:
         end = datetime.now()
         start = end - timedelta(days=70)
@@ -90,24 +90,20 @@ def get_60day_chart(symbol, name):
             return None
         df = df.tail(60)
         
-        fig, ax = plt.subplots(figsize=(8, 3.5))
-        ax.plot(df.index, df['Close'], color='#1f77b4', linewidth=2.5)
-        ax.set_title(f"{name} - 60 Day Trend", fontsize=11)
-        ax.grid(True, alpha=0.3)
-        ax.set_ylabel("Price")
+        fig, ax = plt.subplots(figsize=(4, 1.2))  # Very small for email
+        ax.plot(df.index, df['Close'], color='#1f77b4', linewidth=1.8)
+        ax.axis('off')  # Clean sparkline look
         
-        # Highlight last price
-        last_price = df['Close'].iloc[-1]
-        ax.plot(df.index[-1], last_price, 'ro', markersize=6)
+        # Highlight end point
+        ax.plot(df.index[-1], df['Close'].iloc[-1], 'ro', markersize=4)
         
         buf = io.BytesIO()
-        plt.tight_layout()
-        plt.savefig(buf, format='png', dpi=140, bbox_inches='tight')
+        plt.tight_layout(pad=0)
+        plt.savefig(buf, format='png', dpi=120, bbox_inches='tight')
         buf.seek(0)
         plt.close(fig)
         return base64.b64encode(buf.read()).decode('utf-8')
-    except Exception as e:
-        print(f"Chart error for {symbol}: {e}")
+    except:
         return None
 
 def save_to_csv_once_per_day(results):
@@ -157,7 +153,7 @@ def send_consolidated_email(results, alerts):
         .positive { color: #006400; font-weight: bold; }
         .negative { color: #8B0000; font-weight: bold; }
         .mortgage { font-size: 18px; font-weight: bold; color: #1a73e8; }
-        img { max-width: 100%; height: auto; border: 1px solid #ddd; margin: 8px 0; }
+        img.spark { max-width: 100%; height: auto; margin: 6px 0; }
     </style>
     """
 
@@ -188,14 +184,14 @@ def send_consolidated_email(results, alerts):
         html += '</tr>'
     html += "</table>"
 
-    html += "<h3>60-Day Trend Charts</h3>"
+    html += "<h3>60-Day Sparkline Trends</h3>"
     for data in results:
-        chart_b64 = get_60day_chart(data['symbol'], data['name'])
-        if chart_b64:
-            html += f"<p><strong>{data['name']} ({data['symbol']})</strong></p>"
-            html += f'<img src="data:image/png;base64,{chart_b64}"><br><br>'
+        spark_b64 = get_sparkline(data['symbol'], data['name'])
+        if spark_b64:
+            html += f"<p><strong>{data['name']}</strong></p>"
+            html += f'<img src="data:image/png;base64,{spark_b64}" class="spark"><br>'
 
-    html += "<hr><p><em>Dynamic thresholds • Daily CSV logging • 60-day trends</em></p>"
+    html += "<hr><p><em>Dynamic thresholds • Daily CSV logging • Sparkline trends</em></p>"
 
     msg = MIMEMultipart()
     msg['From'] = SENDER_EMAIL
@@ -209,7 +205,7 @@ def send_consolidated_email(results, alerts):
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, msg.as_string())
         server.quit()
-        print("✅ Email with 60-day charts sent successfully!")
+        print("✅ Email with sparklines sent successfully!")
         return True
     except Exception as e:
         print(f"❌ Failed to send email: {e}")
@@ -263,11 +259,8 @@ def main():
     
     save_to_csv_once_per_day(results)
     
-    if alerts or True:  # Send email even if no alerts for testing
-        print("Sending email with 60-day charts...")
-        send_consolidated_email(results, alerts)
-    else:
-        print("No major moves detected.")
+    print("Sending email with sparklines...")
+    send_consolidated_email(results, alerts)
     
     print("="*95)
 
